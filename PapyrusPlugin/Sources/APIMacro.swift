@@ -1,12 +1,13 @@
 import SwiftSyntax
 import SwiftSyntaxMacros
+import SwiftSyntaxBuilder
 
 public struct APIMacro: PeerMacro {
     public static func expansion(of node: AttributeSyntax,
                           providingPeersOf declaration: some DeclSyntaxProtocol,
                           in context: some MacroExpansionContext) throws -> [DeclSyntax] {
 
-        var declarations = try handleError {
+        let declarations = try handleError {
             guard let type = declaration.as(ProtocolDeclSyntax.self) else {
                 throw PapyrusPluginError("@API can only be applied to protocols.")
             }
@@ -28,7 +29,7 @@ extension APIMacro: ExtensionMacro {
                                  in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
         guard let type = declaration.as(ProtocolDeclSyntax.self) else {
-            throw PapyrusPluginError("@API can only be applied to protocols.")
+            return []
         }
 
         return if let optionalDefaultExtension = type.generateExtension() {
@@ -93,11 +94,16 @@ extension ProtocolDeclSyntax {
             // Call function from protocol
             function.body = CodeBlockSyntax(
                 statements: CodeBlockItemListSyntax(itemsBuilder: {
-                    FunctionCallExprSyntax(
-                        calledExpression: DeclReferenceExprSyntax(baseName: .identifier(function.functionName)),
-                        leftParen: .leftParenToken(),
-                        arguments: .init(params),
-                        rightParen: .rightParenToken()
+                    // try await fn()
+                    TryExprSyntax(
+                        expression: AwaitExprSyntax(
+                            expression: FunctionCallExprSyntax(
+                                calledExpression: DeclReferenceExprSyntax(baseName: .identifier(function.functionName)),
+                                leftParen: .leftParenToken(),
+                                arguments: .init(params),
+                                rightParen: .rightParenToken()
+                            )
+                        )
                     )
                 })
             )

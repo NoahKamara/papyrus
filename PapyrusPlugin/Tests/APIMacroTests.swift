@@ -419,7 +419,7 @@ final class APIMacroTests: XCTestCase {
 
             extension MyService {
                 func search(query: String, since: Since? = nil, _ unnamed: String? = nil, _ unnamed2: String) async throws -> String {
-                    search(query: query, since: since, unnamed, unnamed2)
+                    try await search(query: query, since: since, unnamed, unnamed2)
                 }
             }
             """

@@ -3,7 +3,7 @@ import Foundation
 // MARK: Protocol attributes
 
 @attached(peer, names: suffixed(API))
-@attached(extension)
+@attached(extension, names: arbitrary)
 public macro API(_ typeName: String? = nil) = #externalMacro(module: "PapyrusPlugin", type: "APIMacro")
 
 @attached(peer, names: suffixed(Mock))
