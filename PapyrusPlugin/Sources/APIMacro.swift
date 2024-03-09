@@ -5,22 +5,37 @@ public struct APIMacro: PeerMacro {
     public static func expansion(of node: AttributeSyntax,
                           providingPeersOf declaration: some DeclSyntaxProtocol,
                           in context: some MacroExpansionContext) throws -> [DeclSyntax] {
-        
-        guard let type = declaration.as(ProtocolDeclSyntax.self) else {
-            throw PapyrusPluginError("@API can only be applied to protocols.")
-        }
 
         var declarations = try handleError {
+            guard let type = declaration.as(ProtocolDeclSyntax.self) else {
+                throw PapyrusPluginError("@API can only be applied to protocols.")
+            }
+
             let name = node.firstArgument ?? "\(type.typeName)\(node.attributeName)"
 
             return try type.createAPI(named: name)
         }
 
-        if let optionalDefaultExtension = type.generateExtension() {
-            declarations.append(DeclSyntax(fromProtocol: optionalDefaultExtension))
+        return declarations
+    }
+}
+
+extension APIMacro: ExtensionMacro {
+    public static func expansion(of node: AttributeSyntax,
+                                 attachedTo declaration: some DeclGroupSyntax,
+                                 providingExtensionsOf type: some TypeSyntaxProtocol,
+                                 conformingTo protocols: [TypeSyntax],
+                                 in context: some MacroExpansionContext
+    ) throws -> [ExtensionDeclSyntax] {
+        guard let type = declaration.as(ProtocolDeclSyntax.self) else {
+            throw PapyrusPluginError("@API can only be applied to protocols.")
         }
 
-        return declarations
+        return if let optionalDefaultExtension = type.generateExtension() {
+            [optionalDefaultExtension]
+        } else {
+            []
+        }
     }
 }
 

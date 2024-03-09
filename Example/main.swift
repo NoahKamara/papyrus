@@ -11,7 +11,7 @@ protocol Sample {
     func getTodos() async throws -> [Todo]
 
     @POST("/todos")
-    func createTodo(name: String) async throws -> Todo
+    func createTodo(name: String, isChecked: Bool?) async throws -> Todo
 
     @URLForm
     @POST("/todos/:id/tags")
