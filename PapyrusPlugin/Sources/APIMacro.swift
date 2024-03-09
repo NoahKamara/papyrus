@@ -5,18 +5,95 @@ public struct APIMacro: PeerMacro {
     public static func expansion(of node: AttributeSyntax,
                           providingPeersOf declaration: some DeclSyntaxProtocol,
                           in context: some MacroExpansionContext) throws -> [DeclSyntax] {
-        try handleError {
-            guard let type = declaration.as(ProtocolDeclSyntax.self) else {
-                throw PapyrusPluginError("@API can only be applied to protocols.")
-            }
+        
+        guard let type = declaration.as(ProtocolDeclSyntax.self) else {
+            throw PapyrusPluginError("@API can only be applied to protocols.")
+        }
 
+        var declarations = try handleError {
             let name = node.firstArgument ?? "\(type.typeName)\(node.attributeName)"
+
             return try type.createAPI(named: name)
         }
+
+        if let optionalDefaultExtension = type.generateExtension() {
+            declarations.append(DeclSyntax(fromProtocol: optionalDefaultExtension))
+        }
+
+        return declarations
     }
 }
 
 extension ProtocolDeclSyntax {
+    func generateExtension() -> ExtensionDeclSyntax? {
+        var ext = ExtensionDeclSyntax(
+            extendedType: TypeSyntax("\(name)"),
+            memberBlock: .init(membersBuilder: {})
+        )
+
+        for function in functions {
+            var hasOptionals = false
+            var function = function
+            
+            // Create signature with defaults
+            function.signature.parameterClause.parameters = .init(function.signature.parameterClause.parameters.map {
+                syntax in
+                guard var param = syntax.as(FunctionParameterSyntax.self),
+                      syntax.type.is(OptionalTypeSyntax.self) else {
+                    return syntax
+                }
+
+                hasOptionals = true
+                param.defaultValue = .init(value: NilLiteralExprSyntax(nilKeyword: .keyword(.nil)))
+
+                return param
+            })
+            
+            // If this function does not have any optional parameters don't overload it
+            guard hasOptionals else { continue }
+            
+            // Remove Attributes
+            function.attributes = []
+            
+            // Generate Parameters
+            let params = function.signature.parameterClause.parameters.map { syntax in
+                let labeledExpr = if syntax.firstName.trimmedDescription != "_" {
+                    LabeledExprSyntax(
+                        label: syntax.firstName,
+                        colon: .colonToken(),
+                        expression: DeclReferenceExprSyntax(baseName: syntax.secondName ?? syntax.firstName),
+                        trailingComma: syntax.trailingComma
+                    )
+                } else { 
+                    // param like (_ test: String)
+                    LabeledExprSyntax(
+                        expression: DeclReferenceExprSyntax(baseName: syntax.secondName ?? syntax.firstName),
+                        trailingComma: syntax.trailingComma
+                    )
+                }
+                
+                return labeledExpr
+            }
+            
+            // Call function from protocol
+            function.body = CodeBlockSyntax(
+                statements: CodeBlockItemListSyntax(itemsBuilder: {
+                    FunctionCallExprSyntax(
+                        calledExpression: DeclReferenceExprSyntax(baseName: .identifier(function.functionName)),
+                        leftParen: .leftParenToken(),
+                        arguments: .init(params),
+                        rightParen: .rightParenToken()
+                    )
+                })
+            )
+            
+            ext.memberBlock.members.append(MemberBlockItemSyntax(decl: function))
+        }
+        
+        // Only return extension if there are any members
+        return !ext.memberBlock.members.isEmpty ? ext : nil
+    }
+
     func createAPI(named apiName: String) throws -> String {
         """
         \(access)struct \(apiName): \(typeName) {

@@ -377,4 +377,52 @@ final class APIMacroTests: XCTestCase {
             """
         }
     }
+
+    func testOptionalDefaultExtension() {
+        assertMacro(["API": APIMacro.self]) {
+            """
+            @API
+            protocol MyService {
+                @GET("/search")
+                func search(query: String, since: Since?, _ unnamed: String?, _ unnamed2: String) async throws -> String
+            }
+            """
+        } expansion: {
+            """
+            protocol MyService {
+                @GET("/search")
+                func search(query: String, since: Since?, _ unnamed: String?, _ unnamed2: String) async throws -> String
+            }
+
+            struct MyServiceAPI: MyService {
+                private let provider: PapyrusCore.Provider
+
+                init(provider: PapyrusCore.Provider) {
+                    self.provider = provider
+                }
+
+                func search(query: String, since: Since?, _ unnamed: String?, _ unnamed2: String) async throws -> String {
+                    var req = builder(method: "GET", path: "/search")
+                    req.addQuery("query", value: query)
+                    req.addQuery("since", value: since)
+                    req.addQuery("unnamed", value: unnamed)
+                    req.addQuery("unnamed2", value: unnamed2)
+                    let res = try await provider.request(req)
+                    try res.validate()
+                    return try res.decode(String.self, using: req.responseDecoder)
+                }
+
+                private func builder(method: String, path: String) -> RequestBuilder {
+                    provider.newBuilder(method: method, path: path)
+                }
+            }
+
+            extension MyService {
+                func search(query: String, since: Since? = nil, _ unnamed: String? = nil, _ unnamed2: String) async throws -> String {
+                    search(query: query, since: since, unnamed, unnamed2)
+                }
+            }
+            """
+        }
+    }
 }
